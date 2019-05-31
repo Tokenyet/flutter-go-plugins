@@ -22,7 +22,7 @@ func (p *AudioplayersPlugin) InitPlugin(messenger plugin.BinaryMessenger) error 
         channel.HandleFunc("seek", handleSeek)
         channel.HandleFunc("setVolume", handleSetVolume)
         channel.HandleFunc("setUrl", handleSetUrl)
-        channel.HandleFunc("setReleaseMode", handleSetUrl)
+        channel.HandleFunc("setReleaseMode", handleSetReleaseMode)
         return nil
 }
 
@@ -62,6 +62,17 @@ func handleSetVolume(arguments interface{}) (reply interface{}, err error) {
 }
 
 func handleSetUrl(arguments interface{}) (reply interface{}, err error) {
+        url := []byte(arguments.(map[interface{}]interface{})["url"].(string))
+        isLocal := bool(arguments.(map[interface{}]interface{})["isLocal"].(bool))
+
+        fmt.Printf("setUrl")
+        fmt.Printf("%s", url)
+        fmt.Printf("%b", isLocal)
+
+        return int32(1), nil
+}
+
+func handleSetReleaseMode(arguments interface{}) (reply interface{}, err error) {
         fmt.Printf("setReleaseMode")
         return int32(1), nil
 }
