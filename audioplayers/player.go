@@ -2,29 +2,39 @@ package audioplayers
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/faiface/beep"
 	"github.com/faiface/beep/mp3"
-	"github.com/faiface/beep/speaker"
 	"io"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 )
 
 type channel struct {
+	id   string
 	url  string
 	str  beep.StreamSeekCloser
-	ctrl beep.Ctrl
+	ctrl *beep.Ctrl
 	fmt  beep.Format
 }
 
+func isUrl(test string) bool {
+	u, err := url.ParseRequestURI(test)
+	return err == nil && u.Scheme != ""
+}
+
 func (c *channel) read() (io.ReadCloser, error) {
-	//r, err := c.download()
+	if isUrl(c.url) {
+		fmt.Printf("Downloading %s\n", c.url)
+		return c.download()
+	}
 	return os.Open(c.url)
 }
 
-func createChannel(url string) (*channel, error) {
-	c := channel{url: url}
+func createChannel(id, url string) (*channel, error) {
+	c := channel{id: id, url: url}
 	r, err := c.read()
 
 	if err != nil {
@@ -43,7 +53,7 @@ func (c *channel) decode(r io.ReadCloser) error {
 	}
 
 	c.str = streamer
-	c.ctrl = beep.Ctrl{Streamer: streamer}
+	c.ctrl = &beep.Ctrl{Streamer: streamer}
 	c.fmt = format
 
 	return nil
@@ -64,8 +74,9 @@ func (c *channel) download() (io.ReadCloser, error) {
 }
 
 func (c *channel) play() {
-	speaker.Play(beep.Seq(c.str))
+	c.ctrl.Paused = false
 }
 
 func (c *channel) pause() {
+	c.ctrl.Paused = true
 }

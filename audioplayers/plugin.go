@@ -10,12 +10,24 @@ import (
 
 const channelName = "xyz.luan/audioplayers"
 
+type speakerFunc func()
+
 // Not thread safe, for while
 var loaded = false
 
 // TODO: mutex me??
 func load(sr beep.SampleRate) {
 	speaker.Init(sr, sr.N(time.Second/10))
+}
+
+func doInSpeaker(f speakerFunc) {
+	speaker.Lock()
+	defer speaker.Unlock()
+	f()
+}
+
+func readArg(args interface{}, key string) string {
+	return args.(map[interface{}]interface{})[key].(string)
 }
 
 type AudioplayersPlugin struct {
@@ -27,7 +39,6 @@ func NewAudioplayersPlugin() *AudioplayersPlugin {
 }
 
 func (p *AudioplayersPlugin) InitPlugin(messenger plugin.BinaryMessenger) error {
-	fmt.Printf("Loading ...\n\n\n")
 	channel := plugin.NewMethodChannel(messenger, channelName, plugin.StandardMethodCodec{})
 	channel.HandleFunc("play", p.handlePlay)
 	channel.HandleFunc("resume", p.handleResume)
@@ -41,14 +52,18 @@ func (p *AudioplayersPlugin) InitPlugin(messenger plugin.BinaryMessenger) error 
 	return nil
 }
 
+func (p *AudioplayersPlugin) getChannel(args interface{}) (*channel, error) {
+	url := readArg(args, "url")
+	id := readArg(args, "playerId")
+
+	return p.findOrCreateChannel(id, url)
+}
+
 func (p *AudioplayersPlugin) handlePlay(arguments interface{}) (interface{}, error) {
 	fmt.Printf("Play\n")
 	fmt.Printf("All %v\n", arguments)
 
-	url := arguments.(map[interface{}]interface{})["url"].(string)
-	fmt.Printf("url %s\n", url)
-
-	channel, err := p.getChannel(url)
+	channel, err := p.getChannel(arguments)
 	if err != nil {
 		return nil, err
 	}
@@ -57,37 +72,69 @@ func (p *AudioplayersPlugin) handlePlay(arguments interface{}) (interface{}, err
 		load(channel.fmt.SampleRate)
 	}
 
-	channel.play()
+	speaker.Play(beep.Mix(p.getStreams()...))
+
 	return int32(1), nil
 }
 
-func (p *AudioplayersPlugin) getChannel(url string) (*channel, error) {
-	channel, ok := p.channels[url]
+func (p *AudioplayersPlugin) getStreams() []beep.Streamer {
+	ret := make([]beep.Streamer, 0, len(p.channels))
+	for _, c := range p.channels {
+		ret = append(ret, c.ctrl)
+	}
+	return ret
+}
+
+func (p *AudioplayersPlugin) findOrCreateChannel(id, url string) (*channel, error) {
+	channel, ok := p.channels[id]
 	if ok {
 		return channel, nil
 	}
 
-	channel, err := createChannel(url)
+	channel, err := createChannel(id, url)
 	if err != nil {
 		return nil, err
 	}
 
-	p.channels[url] = channel
+	p.channels[id] = channel
 	return channel, nil
 }
 
 func (p *AudioplayersPlugin) handleResume(arguments interface{}) (interface{}, error) {
 	fmt.Printf("Resume %v\n", arguments)
+
+	channel, err := p.getChannel(arguments)
+	if err != nil {
+		return nil, err
+	}
+	doInSpeaker(func() {
+		channel.ctrl.Paused = false
+	})
 	return int32(1), nil
 }
 
 func (p *AudioplayersPlugin) handlePause(arguments interface{}) (interface{}, error) {
 	fmt.Printf("Pause %v\n", arguments)
+	channel, err := p.getChannel(arguments)
+	if err != nil {
+		return nil, err
+	}
+	doInSpeaker(func() {
+		channel.ctrl.Paused = true
+	})
 	return int32(1), nil
 }
 
 func (p *AudioplayersPlugin) handleStop(arguments interface{}) (interface{}, error) {
 	fmt.Printf("Stop %v\n", arguments)
+	channel, err := p.getChannel(arguments)
+	if err != nil {
+		return nil, err
+	}
+	doInSpeaker(func() {
+		channel.ctrl.Paused = true
+		channel.str.Seek(0)
+	})
 	return int32(1), nil
 }
 
