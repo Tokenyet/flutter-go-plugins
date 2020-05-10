@@ -1,4 +1,4 @@
-module github.com/Tokenyet/plugins/audioplayers
+module github.com/Tokenyet/flutter-go-plugins/audioplayers
 
 go 1.12
 
